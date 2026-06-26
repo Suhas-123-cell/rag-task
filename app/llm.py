@@ -38,18 +38,23 @@ async def stream_answer(
 
 
 async def gemini_stream(prompt: str) -> AsyncGenerator[str, None]:
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel(settings.GEMINI_MODEL)
-    # Gemini SDK is synchronous; collect chunks in a thread to avoid blocking the event loop
+    from google import genai
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    # new SDK is synchronous; run in thread to avoid blocking the event loop
     def collect() -> List[str]:
-        return [c.text for c in model.generate_content(prompt, stream=True) if c.text]
-    chunks = await asyncio.to_thread(collect)
-    for chunk in chunks:
+        chunks = []
+        for chunk in client.models.generate_content_stream(
+            model=settings.GEMINI_MODEL, contents=prompt
+        ):
+            if chunk.text:
+                chunks.append(chunk.text)
+        return chunks
+    for chunk in await asyncio.to_thread(collect):
         yield chunk
 
 
 async def openai_stream(prompt: str) -> AsyncGenerator[str, None]:
+    # pyrefly: ignore [missing-import]
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     stream = await client.chat.completions.create(
