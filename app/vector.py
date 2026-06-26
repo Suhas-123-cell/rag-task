@@ -2,19 +2,18 @@
 from functools import lru_cache
 from typing import List, Dict, Any, Optional
 
-import chromadb
-from sentence_transformers import SentenceTransformer
-
 from app.config import settings
 
 
 @lru_cache(maxsize=1)
-def embedding_model() -> SentenceTransformer:
+def embedding_model():
+    from sentence_transformers import SentenceTransformer  # lazy: heavy, not needed in tests
     return SentenceTransformer(settings.EMBEDDING_MODEL)
 
 
 @lru_cache(maxsize=1)
 def chroma_collection():
+    import chromadb  # lazy: not needed when vector module is mocked in tests
     client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
     return client.get_or_create_collection(
         name=settings.CHROMA_COLLECTION,
