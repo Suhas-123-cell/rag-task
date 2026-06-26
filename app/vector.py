@@ -9,12 +9,12 @@ from app.config import settings
 
 
 @lru_cache(maxsize=1)
-def _model() -> SentenceTransformer:
+def embedding_model() -> SentenceTransformer:
     return SentenceTransformer(settings.EMBEDDING_MODEL)
 
 
 @lru_cache(maxsize=1)
-def _collection():
+def chroma_collection():
     client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
     return client.get_or_create_collection(
         name=settings.CHROMA_COLLECTION,
@@ -23,11 +23,11 @@ def _collection():
 
 
 def embed(texts: List[str]) -> List[List[float]]:
-    return _model().encode(texts, batch_size=32, show_progress_bar=False).tolist()
+    return embedding_model().encode(texts, batch_size=32, show_progress_bar=False).tolist()
 
 
 def add_chunks(doc_id: str, doc_name: str, chunks: List[Dict]) -> None:
-    col = _collection()
+    col = chroma_collection()
     texts = [c["text"] for c in chunks]
     ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
     metas = [{"document_id": doc_id, "document_name": doc_name,
@@ -42,7 +42,7 @@ def add_chunks(doc_id: str, doc_name: str, chunks: List[Dict]) -> None:
 
 def search(query: str, top_k: int = None,
            doc_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-    col = _collection()
+    col = chroma_collection()
     count = col.count()
     if count == 0:
         return []
@@ -74,7 +74,7 @@ def search(query: str, top_k: int = None,
 
 
 def delete_doc(doc_id: str) -> None:
-    col = _collection()
+    col = chroma_collection()
     res = col.get(where={"document_id": doc_id})
     if res["ids"]:
         col.delete(ids=res["ids"])
