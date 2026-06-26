@@ -34,7 +34,7 @@ class DocumentOut(BaseModel):
 
 # ── PDF helpers ───────────────────────────────────────────────────────────────
 
-def _extract(file_path: str) -> Tuple[List[dict], int]:
+def extract_pdf(file_path: str) -> Tuple[List[dict], int]:
     with fitz.open(file_path) as doc:
         pages = []
         for i, page in enumerate(doc):
@@ -44,7 +44,7 @@ def _extract(file_path: str) -> Tuple[List[dict], int]:
         return pages, len(doc)
 
 
-def _chunk(pages: List[dict]) -> List[dict]:
+def chunk_pages(pages: List[dict]) -> List[dict]:
     """Semantic chunking: split at paragraph boundaries, accumulate to CHUNK_SIZE words."""
     chunks, size = [], settings.CHUNK_SIZE
     for p in pages:
@@ -66,7 +66,7 @@ def _chunk(pages: List[dict]) -> List[dict]:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_doc_or_404(doc_id: str, user_id: str, db: Session) -> Document:
+def get_doc_or_404(doc_id: str, user_id: str, db: Session) -> Document:
     doc = db.query(Document).filter(Document.id == doc_id, Document.owner_id == user_id).first()
     if not doc:
         raise HTTPException(404, "Document not found")
@@ -106,8 +106,8 @@ async def upload(
     db.commit()
 
     try:
-        pages, num_pages = _extract(save_path)
-        chunks = _chunk(pages)
+        pages, num_pages = extract_pdf(save_path)
+        chunks = chunk_pages(pages)
         vector.add_chunks(doc_id, file.filename, chunks)
         doc.num_pages = num_pages
         doc.num_chunks = len(chunks)
@@ -134,12 +134,12 @@ def list_documents(db: Session = Depends(get_db), current_user: User = Depends(g
 
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return _get_doc_or_404(doc_id, current_user.id, db)
+    return get_doc_or_404(doc_id, current_user.id, db)
 
 
 @router.delete("/{doc_id}", status_code=204)
 def delete_document(doc_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    doc = _get_doc_or_404(doc_id, current_user.id, db)
+    doc = get_doc_or_404(doc_id, current_user.id, db)
     vector.delete_doc(doc_id)
     if os.path.exists(doc.file_path):
         os.remove(doc.file_path)

@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Dict, List, Optional
 from app.config import settings
 
 
-def _build_prompt(question: str, sources: List[Dict], history: List[Dict]) -> str:
+def build_prompt(question: str, sources: List[Dict], history: List[Dict]) -> str:
     context = "\n\n---\n\n".join(
         f"[{s['document_name']}, page {s['page']}]\n{s['chunk_text']}" for s in sources
     )
@@ -27,29 +27,29 @@ async def stream_answer(
     sources: List[Dict],
     history: Optional[List[Dict]] = None,
 ) -> AsyncGenerator[str, None]:
-    prompt = _build_prompt(question, sources, history or [])
+    prompt = build_prompt(question, sources, history or [])
     if settings.LLM_PROVIDER == "openai":
-        async for token in _openai_stream(prompt):
+        async for token in openai_stream(prompt):
             yield token
     else:
-        async for token in _gemini_stream(prompt):
+        async for token in gemini_stream(prompt):
             yield token
 
 
 
-async def _gemini_stream(prompt: str) -> AsyncGenerator[str, None]:
+async def gemini_stream(prompt: str) -> AsyncGenerator[str, None]:
     import google.generativeai as genai
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model = genai.GenerativeModel(settings.GEMINI_MODEL)
     # Gemini SDK is synchronous; collect chunks in a thread to avoid blocking the event loop
-    def _collect() -> List[str]:
+    def collect() -> List[str]:
         return [c.text for c in model.generate_content(prompt, stream=True) if c.text]
-    chunks = await asyncio.to_thread(_collect)
+    chunks = await asyncio.to_thread(collect)
     for chunk in chunks:
         yield chunk
 
 
-async def _openai_stream(prompt: str) -> AsyncGenerator[str, None]:
+async def openai_stream(prompt: str) -> AsyncGenerator[str, None]:
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     stream = await client.chat.completions.create(
