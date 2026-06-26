@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: Literal["gemini", "openai"] = "gemini"
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-2.0-flash"
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # Embeddings (local, no API key needed)

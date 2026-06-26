@@ -148,15 +148,13 @@ async def stream(
     history = session_history(session)
 
     async def event_stream():
-        yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+        yield f"data: {json.dumps({'type': 'sources', 'sources': sources, 'session_id': session_id})}\n\n"
         full_answer = ""
-        # open a fresh session for the generator — the request-scoped db may be closed
-        # before StreamingResponse finishes iterating
         gen_db = SessionLocal()
         try:
             async for token in llm.stream_answer(body.question, sources, history):
                 full_answer += token
-                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
             msg_id = save_messages(session_id, body.question, full_answer, sources, gen_db)
             yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'message_id': msg_id})}\n\n"
         except Exception as e:
