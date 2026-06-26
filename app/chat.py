@@ -1,11 +1,11 @@
 """RAG query endpoint — standard JSON + SSE streaming + chat history."""
 import json
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -46,6 +46,17 @@ class MessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def _parse_sources(cls, v: Any) -> Any:
+        # DB stores sources as a JSON string; parse it before Pydantic validates
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return []
+        return v or []
 
 
 class SessionOut(BaseModel):
@@ -148,12 +159,7 @@ def get_session(session_id: str, db: Session = Depends(get_db),
     ).first()
     if not s:
         raise HTTPException(404, "Session not found")
-    for m in s.messages:
-        try:
-            m.sources = json.loads(m.sources or "[]")
-        except Exception:
-            m.sources = []
-    return s
+    return s  # MessageOut.sources field_validator handles JSON → list conversion
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
