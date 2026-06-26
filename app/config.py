@@ -30,13 +30,9 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 150    # word overlap between chunks
     TOP_K: int = 5              # retrieved chunks per query
 
-    # Storage — set S3_BUCKET to use S3; leave blank for local filesystem
+    # Storage
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_MB: int = 50
-    S3_BUCKET: str = ""
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
-    AWS_REGION: str = "us-east-1"
 
     # DB
     DATABASE_URL: str = "sqlite:///./rag_app.db"
