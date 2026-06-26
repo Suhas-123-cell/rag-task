@@ -1,12 +1,13 @@
 """PDF upload, extraction, chunking, and embedding pipeline."""
+import logging
 import os
 import re
 import uuid
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 
 import fitz  # PyMuPDF
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -14,21 +15,21 @@ from app.config import settings
 from app.database import Document, User, get_db
 from app import vector
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     original_name: str
     num_pages: int
     num_chunks: int
     file_size: int
-    status: str
-
-    class Config:
-        from_attributes = True
+    status: Literal["processing", "ready", "error"]
 
 
 # ── PDF helpers ───────────────────────────────────────────────────────────────
@@ -44,17 +45,32 @@ def _extract(file_path: str) -> Tuple[List[dict], int]:
 
 
 def _chunk(pages: List[dict]) -> List[dict]:
-    chunks, size, overlap = [], settings.CHUNK_SIZE, settings.CHUNK_OVERLAP
+    """Semantic chunking: split at paragraph boundaries, accumulate to CHUNK_SIZE words."""
+    chunks, size = [], settings.CHUNK_SIZE
     for p in pages:
-        words = p["text"].split()
-        start = 0
-        while start < len(words):
-            end = min(start + size, len(words))
-            chunks.append({"text": " ".join(words[start:end]), "page": p["page"]})
-            if end == len(words):
-                break
-            start += size - overlap
+        paragraphs = [s.strip() for s in re.split(r"\n\n+", p["text"]) if s.strip()]
+        current, current_words = [], 0
+        for para in paragraphs:
+            para_words = len(para.split())
+            if current and current_words + para_words > size:
+                chunks.append({"text": " ".join(current), "page": p["page"]})
+                # keep last paragraph as overlap for context continuity
+                current = [current[-1]]
+                current_words = len(current[0].split())
+            current.append(para)
+            current_words += para_words
+        if current:
+            chunks.append({"text": " ".join(current), "page": p["page"]})
     return chunks
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_doc_or_404(doc_id: str, user_id: str, db: Session) -> Document:
+    doc = db.query(Document).filter(Document.id == doc_id, Document.owner_id == user_id).first()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    return doc
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -97,11 +113,13 @@ async def upload(
         doc.num_chunks = len(chunks)
         doc.status = "ready"
     except Exception as e:
+        log.error("PDF processing failed for %s: %s", doc_id, e)
+        # clean up partial state so disk and vector store stay consistent
+        vector.delete_doc(doc_id)
+        if os.path.exists(save_path):
+            os.remove(save_path)
         doc.status = "error"
         db.commit()
-        # ponytail: log internally; never expose raw exception detail to callers
-        import logging
-        logging.getLogger(__name__).error("PDF processing failed for %s: %s", doc_id, e)
         raise HTTPException(500, "PDF processing failed. Check server logs.")
 
     db.commit()
@@ -116,17 +134,12 @@ def list_documents(db: Session = Depends(get_db), current_user: User = Depends(g
 
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    doc = db.query(Document).filter(Document.id == doc_id, Document.owner_id == current_user.id).first()
-    if not doc:
-        raise HTTPException(404, "Document not found")
-    return doc
+    return _get_doc_or_404(doc_id, current_user.id, db)
 
 
 @router.delete("/{doc_id}", status_code=204)
 def delete_document(doc_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    doc = db.query(Document).filter(Document.id == doc_id, Document.owner_id == current_user.id).first()
-    if not doc:
-        raise HTTPException(404, "Document not found")
+    doc = _get_doc_or_404(doc_id, current_user.id, db)
     vector.delete_doc(doc_id)
     if os.path.exists(doc.file_path):
         os.remove(doc.file_path)

@@ -36,12 +36,6 @@ async def stream_answer(
             yield token
 
 
-async def get_answer(question: str, sources: List[Dict], history: Optional[List[Dict]] = None) -> str:
-    full = ""
-    async for token in stream_answer(question, sources, history):
-        full += token
-    return full
-
 
 async def _gemini_stream(prompt: str) -> AsyncGenerator[str, None]:
     import google.generativeai as genai

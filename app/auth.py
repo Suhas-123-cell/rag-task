@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -20,8 +20,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    username: str
-    password: str
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8)
 
 
 class TokenResponse(BaseModel):
@@ -31,18 +31,16 @@ class TokenResponse(BaseModel):
     username: str
 
 
+class UserOut(BaseModel):
+    id: str
+    email: str
+    username: str
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def hash_password(pw: str) -> str:
-    return pwd_context.hash(pw)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-
 def create_token(user_id: str) -> str:
-    exp = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    exp = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode({"sub": user_id, "exp": exp}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -79,7 +77,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=body.email,
         username=body.username,
-        hashed_password=hash_password(body.password),
+        hashed_password=pwd_context.hash(body.password),
     )
     db.add(user)
     db.commit()
@@ -90,11 +88,11 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == form.username).first()
-    if not user or not verify_password(form.password, user.hashed_password):
+    if not user or not pwd_context.verify(form.password, user.hashed_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect username or password")
     return TokenResponse(access_token=create_token(user.id), user_id=user.id, username=user.username)
 
 
-@router.get("/me")
+@router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
-    return {"id": current_user.id, "email": current_user.email, "username": current_user.username}
+    return current_user
