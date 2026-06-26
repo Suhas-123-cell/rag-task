@@ -5,7 +5,6 @@ from typing import Literal
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "RAG Document Assistant"
-    DEBUG: bool = False
 
     # Auth — SECRET_KEY has no default; startup will fail if missing from .env
     SECRET_KEY: str
