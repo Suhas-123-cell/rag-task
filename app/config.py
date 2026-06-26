@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "RAG Document Assistant"
     DEBUG: bool = False
 
-    # Auth
-    SECRET_KEY: str = "change-this-to-a-random-32-byte-hex-string"
+    # Auth — SECRET_KEY has no default; startup will fail if missing from .env
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24h
 
