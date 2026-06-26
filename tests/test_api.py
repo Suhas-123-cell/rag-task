@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 # ── Health ────────────────────────────────────────────────────────────────────
 
 def test_health(client):
-    r = client.get("/")
+    r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
 
