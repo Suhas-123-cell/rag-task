@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine, Column, String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
@@ -16,7 +16,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     documents = relationship("Document", back_populates="owner", cascade="all, delete-orphan")
     sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
 
@@ -31,7 +31,7 @@ class Document(Base):
     file_size = Column(Integer, default=0)
     status = Column(String, default="processing")  # processing | ready | error
     owner_id = Column(String, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     owner = relationship("User", back_populates="documents")
 
 
@@ -40,7 +40,7 @@ class ChatSession(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String, default="New Chat")
     user_id = Column(String, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     user = relationship("User", back_populates="sessions")
     messages = relationship("ChatMessage", back_populates="session",
                             order_by="ChatMessage.created_at", cascade="all, delete-orphan")
@@ -53,7 +53,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)   # user | assistant
     content = Column(Text, nullable=False)
     sources = Column(Text, default="[]")    # JSON-serialised list of source dicts
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     session = relationship("ChatSession", back_populates="messages")
 
 

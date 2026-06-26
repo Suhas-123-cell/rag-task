@@ -34,15 +34,13 @@ class DocumentOut(BaseModel):
 # ── PDF helpers ───────────────────────────────────────────────────────────────
 
 def _extract(file_path: str) -> Tuple[List[dict], int]:
-    doc = fitz.open(file_path)
-    pages = []
-    for i, page in enumerate(doc):
-        text = re.sub(r"[ \t]+", " ", re.sub(r"\n{3,}", "\n\n", page.get_text("text"))).strip()
-        if text:
-            pages.append({"text": text, "page": i + 1})
-    total = len(doc)
-    doc.close()
-    return pages, total
+    with fitz.open(file_path) as doc:
+        pages = []
+        for i, page in enumerate(doc):
+            text = re.sub(r"[ \t]+", " ", re.sub(r"\n{3,}", "\n\n", page.get_text("text"))).strip()
+            if text:
+                pages.append({"text": text, "page": i + 1})
+        return pages, len(doc)
 
 
 def _chunk(pages: List[dict]) -> List[dict]:
