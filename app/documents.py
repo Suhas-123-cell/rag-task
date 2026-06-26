@@ -101,7 +101,10 @@ async def upload(
     except Exception as e:
         doc.status = "error"
         db.commit()
-        raise HTTPException(500, f"Processing failed: {e}")
+        # ponytail: log internally; never expose raw exception detail to callers
+        import logging
+        logging.getLogger(__name__).error("PDF processing failed for %s: %s", doc_id, e)
+        raise HTTPException(500, "PDF processing failed. Check server logs.")
 
     db.commit()
     db.refresh(doc)
