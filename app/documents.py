@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import uuid
+from functools import lru_cache
 from typing import List, Literal, Tuple
 
 import fitz  # PyMuPDF
@@ -32,10 +33,47 @@ class DocumentOut(BaseModel):
     status: Literal["processing", "ready", "error"]
 
 
+# ── Storage (S3 or local) ─────────────────────────────────────────────────────
+
+@lru_cache(maxsize=1)
+def s3_client():
+    import boto3  # lazy: only needed when S3_BUCKET is set
+    return boto3.client(
+        "s3",
+        region_name=settings.AWS_REGION,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+    )
+
+
+def storage_save(doc_id: str, content: bytes) -> str:
+    """Upload to S3 if configured, else write to local disk. Returns the stored ref."""
+    if settings.S3_BUCKET:
+        key = f"documents/{doc_id}.pdf"
+        s3_client().put_object(Bucket=settings.S3_BUCKET, Key=key, Body=content,
+                               ContentType="application/pdf")
+        return key
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    path = os.path.join(settings.UPLOAD_DIR, f"{doc_id}.pdf")
+    with open(path, "wb") as f:
+        f.write(content)
+    return path
+
+
+def storage_delete(file_ref: str) -> None:
+    if settings.S3_BUCKET:
+        try:
+            s3_client().delete_object(Bucket=settings.S3_BUCKET, Key=file_ref)
+        except Exception as e:
+            log.warning("S3 delete failed for %s: %s", file_ref, e)
+    elif os.path.exists(file_ref):
+        os.remove(file_ref)
+
+
 # ── PDF helpers ───────────────────────────────────────────────────────────────
 
-def extract_pdf(file_path: str) -> Tuple[List[dict], int]:
-    with fitz.open(file_path) as doc:
+def extract_pdf(content: bytes) -> Tuple[List[dict], int]:
+    with fitz.open(stream=content, filetype="pdf") as doc:
         pages = []
         for i, page in enumerate(doc):
             text = re.sub(r"[ \t]+", " ", re.sub(r"\n{3,}", "\n\n", page.get_text("text"))).strip()
@@ -54,7 +92,6 @@ def chunk_pages(pages: List[dict]) -> List[dict]:
             para_words = len(para.split())
             if current and current_words + para_words > size:
                 chunks.append({"text": " ".join(current), "page": p["page"]})
-                # keep last paragraph as overlap for context continuity
                 current = [current[-1]]
                 current_words = len(current[0].split())
             current.append(para)
@@ -89,15 +126,12 @@ async def upload(
         raise HTTPException(413, f"File exceeds {settings.MAX_FILE_MB} MB limit")
 
     doc_id = str(uuid.uuid4())
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    save_path = os.path.join(settings.UPLOAD_DIR, f"{doc_id}.pdf")
-    with open(save_path, "wb") as f:
-        f.write(content)
+    file_ref = storage_save(doc_id, content)
 
     doc = Document(
         id=doc_id,
         original_name=file.filename,
-        file_path=save_path,
+        file_path=file_ref,
         file_size=len(content),
         owner_id=current_user.id,
         status="processing",
@@ -106,7 +140,7 @@ async def upload(
     db.commit()
 
     try:
-        pages, num_pages = extract_pdf(save_path)
+        pages, num_pages = extract_pdf(content)
         chunks = chunk_pages(pages)
         vector.add_chunks(doc_id, file.filename, chunks)
         doc.num_pages = num_pages
@@ -114,10 +148,8 @@ async def upload(
         doc.status = "ready"
     except Exception as e:
         log.error("PDF processing failed for %s: %s", doc_id, e)
-        # clean up partial state so disk and vector store stay consistent
         vector.delete_doc(doc_id)
-        if os.path.exists(save_path):
-            os.remove(save_path)
+        storage_delete(file_ref)
         doc.status = "error"
         db.commit()
         raise HTTPException(500, "PDF processing failed. Check server logs.")
@@ -141,7 +173,6 @@ def get_document(doc_id: str, db: Session = Depends(get_db), current_user: User 
 def delete_document(doc_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     doc = get_doc_or_404(doc_id, current_user.id, db)
     vector.delete_doc(doc_id)
-    if os.path.exists(doc.file_path):
-        os.remove(doc.file_path)
+    storage_delete(doc.file_path)
     db.delete(doc)
     db.commit()
