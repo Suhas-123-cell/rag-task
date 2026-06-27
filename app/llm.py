@@ -7,7 +7,7 @@ from app.config import settings
 
 def build_prompt(question: str, sources: List[Dict], history: List[Dict]) -> str:
     context = "\n\n---\n\n".join(
-        f"[{s['document_name']}, page {s['page']}]\n{s['chunk_text']}" for s in sources
+        f"[{s['document_name']}, page {s['page']}]\n{s['chunk_text'][:1500]}" for s in sources
     )
     hist = ""
     if history:
@@ -31,6 +31,9 @@ async def stream_answer(
     if settings.LLM_PROVIDER == "openai":
         async for token in openai_stream(prompt):
             yield token
+    elif settings.LLM_PROVIDER == "groq":
+        async for token in groq_stream(prompt):
+            yield token
     else:
         async for token in gemini_stream(prompt):
             yield token
@@ -51,6 +54,21 @@ async def gemini_stream(prompt: str) -> AsyncGenerator[str, None]:
         return chunks
     for chunk in await asyncio.to_thread(collect):
         yield chunk
+
+
+async def groq_stream(prompt: str) -> AsyncGenerator[str, None]:
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=settings.GROQ_API_KEY,
+                         base_url="https://api.groq.com/openai/v1")
+    stream = await client.chat.completions.create(
+        model=settings.GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        stream=True,
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
 
 
 async def openai_stream(prompt: str) -> AsyncGenerator[str, None]:

@@ -12,11 +12,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24h
 
     # LLM
-    LLM_PROVIDER: Literal["gemini", "openai"] = "gemini"
+    LLM_PROVIDER: Literal["gemini", "openai", "groq"] = "groq"
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
     OPENAI_MODEL: str = "gpt-4o-mini"
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
 
     # Embeddings (local, no API key needed)
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
