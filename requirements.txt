@@ -25,6 +25,5 @@ sentence-transformers==3.3.1
 # Vector store
 chromadb==0.5.23
 
-# LLM providers (install what you use)
-google-genai==1.20.0
+# LLM — Groq via OpenAI-compatible SDK
 openai==1.58.1

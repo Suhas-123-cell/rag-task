@@ -1,6 +1,7 @@
-"""LLM provider abstraction — Gemini (default) or OpenAI, streaming-first."""
-import asyncio
+"""LLM — Groq streaming via llama-3.1-8b-instant."""
 from typing import AsyncGenerator, Dict, List, Optional
+
+from openai import AsyncOpenAI
 
 from app.config import settings
 
@@ -28,55 +29,10 @@ async def stream_answer(
     history: Optional[List[Dict]] = None,
 ) -> AsyncGenerator[str, None]:
     prompt = build_prompt(question, sources, history or [])
-    if settings.LLM_PROVIDER == "openai":
-        async for token in openai_stream(prompt):
-            yield token
-    elif settings.LLM_PROVIDER == "groq":
-        async for token in groq_stream(prompt):
-            yield token
-    else:
-        async for token in gemini_stream(prompt):
-            yield token
-
-
-
-async def gemini_stream(prompt: str) -> AsyncGenerator[str, None]:
-    from google import genai
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    # new SDK is synchronous; run in thread to avoid blocking the event loop
-    def collect() -> List[str]:
-        chunks = []
-        for chunk in client.models.generate_content_stream(
-            model=settings.GEMINI_MODEL, contents=prompt
-        ):
-            if chunk.text:
-                chunks.append(chunk.text)
-        return chunks
-    for chunk in await asyncio.to_thread(collect):
-        yield chunk
-
-
-async def groq_stream(prompt: str) -> AsyncGenerator[str, None]:
-    from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=settings.GROQ_API_KEY,
                          base_url="https://api.groq.com/openai/v1")
     stream = await client.chat.completions.create(
         model=settings.GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        stream=True,
-    )
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            yield delta
-
-
-async def openai_stream(prompt: str) -> AsyncGenerator[str, None]:
-    # pyrefly: ignore [missing-import]
-    from openai import AsyncOpenAI
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-    stream = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
         messages=[{"role": "user", "content": prompt}],
         stream=True,
     )
