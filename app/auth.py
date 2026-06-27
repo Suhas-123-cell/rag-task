@@ -85,11 +85,16 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=create_token(user.id), user_id=user.id, username=user.username)
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form.username).first()
-    if not user or not pwd_context.verify(form.password, user.hashed_password):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect username or password")
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user or not pwd_context.verify(body.password, user.hashed_password):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
     return TokenResponse(access_token=create_token(user.id), user_id=user.id, username=user.username)
 
 
