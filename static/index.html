@@ -218,7 +218,11 @@ async function apiFetch(path, opts = {}) {
   const r = await fetch(API + path, { ...opts, headers });
   if (!r.ok) {
     const e = await r.json().catch(() => ({ detail: r.statusText }));
-    throw new Error(e.detail || r.statusText);
+    // FastAPI validation errors return detail as an array of {msg, loc} objects
+    const detail = Array.isArray(e.detail)
+      ? e.detail.map(d => d.msg || JSON.stringify(d)).join(', ')
+      : (e.detail || r.statusText);
+    throw new Error(detail);
   }
   return r.status === 204 ? null : r.json();
 }
