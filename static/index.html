@@ -98,9 +98,9 @@
     <div id="view-register">
       <h2>RAG <span>Assistant</span></h2>
       <p>Create an account to get started</p>
-      <input id="reg-email" type="email" placeholder="Email">
-      <input id="reg-user"  type="text"  placeholder="Username">
-      <input id="reg-pass"  type="password" placeholder="Password (min 8 chars)">
+      <input id="reg-email" type="email" placeholder="Email" onkeydown="if(event.key==='Enter') register()">
+      <input id="reg-user"  type="text"  placeholder="Username" onkeydown="if(event.key==='Enter') register()">
+      <input id="reg-pass"  type="password" placeholder="Password (min 8 chars)" onkeydown="if(event.key==='Enter') register()">
       <button class="btn-primary" onclick="register()">Create account</button>
       <div class="auth-error" id="reg-err"></div>
       <div class="switch">Already have an account? <a onclick="showLogin()">Sign in</a></div>
@@ -109,8 +109,8 @@
     <div id="view-login" style="display:none">
       <h2>Welcome <span>back</span></h2>
       <p>Sign in with your email and password</p>
-      <input id="login-email" type="email"    placeholder="Email">
-      <input id="login-pass"  type="password" placeholder="Password">
+      <input id="login-email" type="email"    placeholder="Email" onkeydown="if(event.key==='Enter') login()">
+      <input id="login-pass"  type="password" placeholder="Password" onkeydown="if(event.key==='Enter') login()">
       <button class="btn-primary" onclick="login()">Sign in</button>
       <div class="auth-error" id="login-err"></div>
       <div class="switch">Don't have an account? <a onclick="showRegister()">Register</a></div>
