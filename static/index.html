@@ -44,9 +44,14 @@
 
   #sessions-bar { padding: 8px 16px; border-bottom: 1px solid #2a2a2a; display: flex; gap: 6px; align-items: center; overflow-x: auto; }
   #sessions-bar button { padding: 4px 10px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #888; font-size: 12px; cursor: pointer; white-space: nowrap; }
-  #sessions-bar button.active { background: #7c6af7; border-color: #7c6af7; color: #fff; }
   #new-session-btn { border-style: dashed !important; color: #555 !important; background: none !important; }
   #new-session-btn:hover { border-color: #7c6af7 !important; color: #7c6af7 !important; }
+  .session-tab { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 10px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; font-size: 12px; white-space: nowrap; }
+  .session-tab.active { border-color: #7c6af7; background: #1e1640; }
+  .session-tab span { color: #888; cursor: pointer; }
+  .session-tab.active span { color: #c4b5fd; }
+  .session-tab .del-btn { color: #444; background: none; border: none; cursor: pointer; font-size: 12px; line-height: 1; padding: 0 2px; }
+  .session-tab .del-btn:hover { color: #f87171; }
 
   #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
   .msg { max-width: 720px; }
@@ -212,11 +217,12 @@ function renderSessionBar() {
   const bar = document.getElementById('sessions-bar');
   bar.innerHTML = '<button id="new-session-btn" onclick="newSession()">+ New chat</button>';
   Object.entries(sessionNames).forEach(([id, name]) => {
-    const btn = document.createElement('button');
-    btn.textContent = name; btn.dataset.id = id;
-    if (id === currentSession) btn.className = 'active';
-    btn.onclick = () => switchSession(id);
-    bar.appendChild(btn);
+    const tab = document.createElement('div');
+    tab.className = 'session-tab' + (id === currentSession ? ' active' : '');
+    tab.innerHTML = `<span>${name}</span><button class="del-btn" title="Delete">x</button>`;
+    tab.querySelector('span').onclick = () => switchSession(id);
+    tab.querySelector('.del-btn').onclick = (e) => { e.stopPropagation(); deleteSession(id); };
+    bar.appendChild(tab);
   });
 }
 
@@ -237,6 +243,18 @@ async function switchSession(id) {
 function newSession() {
   currentSession = null; renderSessionBar();
   document.getElementById('messages').innerHTML = emptyHtml();
+}
+
+async function deleteSession(id) {
+  try {
+    await apiFetch('/chat/sessions/' + id, { method: 'DELETE' });
+    delete sessionNames[id];
+    if (currentSession === id) {
+      currentSession = null;
+      document.getElementById('messages').innerHTML = emptyHtml();
+    }
+    renderSessionBar();
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 async function send() {
